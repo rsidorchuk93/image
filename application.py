@@ -5,6 +5,8 @@ from io import BytesIO
 from PIL import Image
 from flask import Flask, render_template, request
 from transformers import ViTImageProcessor, ViTForImageClassification
+from werkzeug.utils import secure_filename
+from flask_sqlalchemy import SQLAlchemy
 
 application = Flask(__name__)
 
