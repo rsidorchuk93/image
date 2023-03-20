@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Age Prediction App</title>
+</head>
+<body>
+    <h1>Age Prediction App</h1>
+    <form action="/" method="POST" enctype="multipart/form-data">
+        <input type="file" name="file"><br>
+        <button type="submit">Submit</button>
+    </form>
+    {% if error %}
+    <p>{{ error }}</p>
+    {% endif %}
+</body>
+</html>
