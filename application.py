@@ -7,10 +7,9 @@ import atexit
 import pathlib
 
 from PIL import Image
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, send_from_directory
 from transformers import ViTImageProcessor, ViTForImageClassification
 from werkzeug.utils import secure_filename
-from flask_sqlalchemy import SQLAlchemy
 
 application = Flask(__name__)
 
@@ -34,10 +33,10 @@ age_groups = {
 }
 
 class Prediction:
-    def __init__(self, age, confidence, image_path):
+    def __init__(self, age, confidence, image_url):
         self.age = age
         self.confidence = confidence
-        self.image_path = image_path
+        self.image_url = image_url
         self.timestamp = datetime.now()
 
 def allowed_file(filename):
@@ -73,17 +72,24 @@ def index():
             return render_template('index.html', error='No file selected')
         if not allowed_file(file.filename):
             return render_template('index.html', error='Invalid file type')
+        # Save file in temporary folder
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join(temp_dir, filename)
+        file.save(temp_path)
         # Read file contents and predict age
-        file_bytes = file.read()
-        age, confidence = predict_age(file_bytes)
+        with open(temp_path, "rb") as image_file:
+            file_bytes = image_file.read()
+            age, confidence = predict_age(file_bytes)
         # Create prediction object
-        prediction = Prediction(age, confidence, file_bytes)
+        image_url = f'/temp/{filename}'
+        prediction = Prediction(age, confidence, image_url)
         # Render result template
         return render_template('result.html', prediction=prediction)
     return render_template('index.html')
 
-
-
+@application.route('/temp/<filename>')
+def temp_file(filename):
+    return send_from_directory(temp_dir, filename)
 
 if __name__ == '__main__':
     application.run(debug=True)
