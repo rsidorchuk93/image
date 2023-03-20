@@ -2,6 +2,10 @@ import os
 from datetime import datetime
 from io import BytesIO
 
+import tempfile
+import atexit
+import pathlib
+
 from PIL import Image
 from flask import Flask, render_template, request
 from transformers import ViTImageProcessor, ViTForImageClassification
@@ -9,6 +13,8 @@ from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 
 application = Flask(__name__)
+
+application.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Load model and processor
 model = ViTForImageClassification.from_pretrained('nateraw/vit-age-classifier')
@@ -28,11 +34,32 @@ age_groups = {
 }
 
 class Prediction:
-    def __init__(self, age, confidence, image_bytes):
+    def __init__(self, age, confidence, image_path):
         self.age = age
         self.confidence = confidence
-        self.image_bytes = image_bytes
+        self.image_path = image_path
         self.timestamp = datetime.now()
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg'}
+
+def delete_temp_files(temp_dir):
+    for file in temp_dir.iterdir():
+        file.unlink()
+    temp_dir.rmdir()
+
+temp_dir = pathlib.Path(tempfile.mkdtemp())
+atexit.register(delete_temp_files, temp_dir)
+
+def predict_age(image_bytes):
+    image = Image.open(BytesIO(image_bytes))
+    inputs = processor(images=image, return_tensors="pt")
+    outputs = model(**inputs)
+    proba = outputs.logits.softmax(dim=1)
+    preds = proba.argmax(dim=1)
+    predicted_age = age_groups[preds.item()]
+    confidence = round(proba[0][preds].item() * 100, 2)
+    return predicted_age, confidence
 
 @application.route('/', methods=['GET', 'POST'])
 def index():
@@ -55,18 +82,8 @@ def index():
         return render_template('result.html', prediction=prediction)
     return render_template('index.html')
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg'}
 
-def predict_age(image_bytes):
-    image = Image.open(BytesIO(image_bytes))
-    inputs = processor(images=image, return_tensors="pt")
-    outputs = model(**inputs)
-    proba = outputs.logits.softmax(dim=1)
-    preds = proba.argmax(dim=1)
-    predicted_age = age_groups[preds.item()]
-    confidence = round(proba[0][preds].item() * 100, 2)
-    return predicted_age, confidence
+
 
 if __name__ == '__main__':
     application.run(debug=True)
